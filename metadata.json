@@ -1,0 +1,6 @@
+{
+  "name": "Privacy Browser",
+  "description": "A tracker-free, ad-free web browser with built-in search capabilities.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
