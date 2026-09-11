@@ -1,70 +1,75 @@
-import express from "express";
-import path from "path";
-import { createServer as createViteServer } from "vite";
-import * as cheerio from "cheerio";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 
+// server.ts
+var import_express = __toESM(require("express"), 1);
+var import_path = __toESM(require("path"), 1);
+var import_vite = require("vite");
+var cheerio = __toESM(require("cheerio"), 1);
 async function startServer() {
-  const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
-
-  // Proxy endpoint to fetch and sanitize web pages
+  const app = (0, import_express.default)();
+  const PORT = 3e3;
   app.get("/api/browse", async (req, res) => {
-    const targetUrl = req.query.url as string;
-    const isIncognito = req.query.incognito === 'true';
+    const targetUrl = req.query.url;
+    const isIncognito = req.query.incognito === "true";
     if (!targetUrl) {
       return res.status(400).send("No URL provided");
     }
-
     try {
-      const fetchHeaders: any = {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      const fetchHeaders = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
       };
-
       if (!isIncognito && req.headers.cookie) {
         fetchHeaders["Cookie"] = req.headers.cookie;
       }
-
       const response = await fetch(targetUrl, {
-        headers: fetchHeaders,
+        headers: fetchHeaders
       });
-
       if (!isIncognito) {
         const setCookieHeaders = response.headers.getSetCookie ? response.headers.getSetCookie() : response.headers.get("set-cookie");
         if (setCookieHeaders) {
           res.set("Set-Cookie", setCookieHeaders);
         }
       }
-
       const contentType = response.headers.get("content-type") || "";
-      
-      // If it's HTML, we sanitize it
       if (contentType.includes("text/html")) {
         const html = await response.text();
         const $ = cheerio.load(html);
-
-        // 1. Selective blocking of trackers and ads
-        const blockList = ['doubleclick', 'adsystem', 'googlesyndication', 'google-analytics', 'analytics.js', 'tracker', 'pixel', 'facebook.net', 'outbrain', 'taboola', 'amazon-adsystem'];
-        
+        const blockList = ["doubleclick", "adsystem", "googlesyndication", "google-analytics", "analytics.js", "tracker", "pixel", "facebook.net", "outbrain", "taboola", "amazon-adsystem"];
         $("script, iframe").each((i, el) => {
           const src = $(el).attr("src") || "";
-          if (src && blockList.some(kw => src.toLowerCase().includes(kw))) {
+          if (src && blockList.some((kw) => src.toLowerCase().includes(kw))) {
             $(el).remove();
           }
         });
-
         $("script:not([src])").each((i, el) => {
           const content = $(el).html() || "";
-          if (blockList.some(kw => content.toLowerCase().includes(kw))) {
+          if (blockList.some((kw) => content.toLowerCase().includes(kw))) {
             $(el).remove();
           }
         });
-
-        // Basic ad container removal
         $(".ad, .ads, .advertisement, [id^='div-gpt-ad']").remove();
-
-        // 2. Inject <base> tag so relative assets load properly from the origin
         const parsedUrl = new URL(targetUrl);
         if ($("base").length === 0) {
           $("head").prepend(`<base href="${parsedUrl.origin}">`);
@@ -74,8 +79,6 @@ async function startServer() {
             $("base").attr("href", new URL(existingBase, parsedUrl.origin).href);
           }
         }
-
-        // 3. Inject a lightweight script to communicate clicks and forms to our React app
         const bridgeScript = `
           <script>
             document.addEventListener('click', function(e) {
@@ -134,7 +137,7 @@ async function startServer() {
                 contextMenu.style.border = '1px solid #333';
                 contextMenu.style.fontFamily = 'sans-serif';
                 contextMenu.style.fontSize = '14px';
-                contextMenu.innerText = '⬇ Download ' + (target.tagName === 'IMG' ? 'Image' : 'Video');
+                contextMenu.innerText = '\u2B07 Download ' + (target.tagName === 'IMG' ? 'Image' : 'Video');
 
                 contextMenu.onmouseenter = () => { contextMenu.style.background = '#333'; };
                 contextMenu.onmouseleave = () => { contextMenu.style.background = '#1a1a1a'; };
@@ -167,45 +170,36 @@ async function startServer() {
           </script>
         `;
         $("body").append(bridgeScript);
-
         res.send($.html());
       } else {
-        // For non-HTML (like images loaded directly via address bar, or JSON), just pipe it
         const buffer = await response.arrayBuffer();
         res.set("Content-Type", contentType);
         res.send(Buffer.from(buffer));
       }
-    } catch (err: any) {
+    } catch (err) {
       res.status(500).send(`Error fetching URL: ${err.message}`);
     }
   });
-
-  // Download endpoint to proxy media downloads and enforce attachment
   app.get("/api/download", async (req, res) => {
-    const targetUrl = req.query.url as string;
+    const targetUrl = req.query.url;
     if (!targetUrl) return res.status(400).send("No URL provided");
-
     try {
       const response = await fetch(targetUrl, {
         headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-          Accept: "*/*",
-        },
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+          Accept: "*/*"
+        }
       });
-
       if (!response.ok) {
         return res.status(response.status).send("Failed to fetch media");
       }
-
       const contentType = response.headers.get("content-type") || "application/octet-stream";
       let filename = "download";
-      
       try {
         const parsedUrl = new URL(targetUrl);
-        const parts = parsedUrl.pathname.split('/');
+        const parts = parsedUrl.pathname.split("/");
         const lastPart = parts[parts.length - 1];
-        if (lastPart && lastPart.includes('.')) {
+        if (lastPart && lastPart.includes(".")) {
           filename = lastPart;
         } else {
           if (contentType.includes("image/jpeg")) filename += ".jpg";
@@ -216,36 +210,31 @@ async function startServer() {
           else if (contentType.includes("video/webm")) filename += ".webm";
         }
       } catch (e) {
-        // ignore parsing errors
       }
-
       const buffer = await response.arrayBuffer();
       res.set("Content-Type", contentType);
       res.set("Content-Disposition", `attachment; filename="${filename}"`);
       res.send(Buffer.from(buffer));
-    } catch (err: any) {
+    } catch (err) {
       res.status(500).send(`Error downloading URL: ${err.message}`);
     }
   });
-
-  // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
+    const vite = await (0, import_vite.createServer)({
       server: { middlewareMode: true },
-      appType: "spa",
+      appType: "spa"
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+    const distPath = import_path.default.join(process.cwd(), "dist");
+    app.use(import_express.default.static(distPath));
     app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+      res.sendFile(import_path.default.join(distPath, "index.html"));
     });
   }
-
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
   });
 }
-
 startServer();
+//# sourceMappingURL=server.cjs.map
